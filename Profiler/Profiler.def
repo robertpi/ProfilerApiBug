@@ -1,0 +1,5 @@
+LIBRARY "Profiler.Dll"
+
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE

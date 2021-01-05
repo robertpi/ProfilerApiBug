@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ProfilerTestHarness": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "CORECLR_ENABLE_PROFILING": "1",
+        "CORECLR_PROFILER": "{88E5B029-D6B4-4709-B445-03E9BDAB2FA2}",
+        "CORECLR_PROFILER_PATH": "..\\..\\..\\x64\\Debug\\Profiler.dll"
+      }
+    }
+  }
+}
