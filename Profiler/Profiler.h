@@ -21,17 +21,15 @@ namespace trace {
         ICorProfilerInfo8* corProfilerInfo;
         std::mutex mapLock;
 
-        //clrProfilerHomeEnvValue
-        WSTRING clrProfilerHomeEnvValue;
-
         //iLRewriteMap ,because generic method has multi functionid
         std::unordered_map<mdMethodDef, bool> iLRewriteMap{};
 
         AssemblyProperty corAssemblyProperty{};
-        bool entryPointReWrote = false;
 
         //moduleMetaInfoMap
         std::unordered_map<ModuleID, ModuleMetaInfo*> moduleMetaInfoMap{};
+
+        std::unordered_map<WSTRING, FunctionMetaInfo*> functionNameMetaInfoMap{};
 
     public:
         Profiler();
@@ -167,6 +165,15 @@ namespace trace {
             return count;
         }
 
-        HRESULT RewriteMethod(FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl);
+        HRESULT RewriteMethod(WSTRING targetFunction, FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl);
+        HRESULT InnerRewrite(WSTRING targetFunction, ModuleID moduleId, mdToken function_token, ICorProfilerFunctionControl* pICorProfilerFunctionControl);
+        HRESULT DoRequestReJit(WSTRING functionName);
+
+        static Profiler*& GetSingletonish()
+        {
+            static Profiler* s_profiler = nullptr;
+            return s_profiler;
+        }
+
     };
 }

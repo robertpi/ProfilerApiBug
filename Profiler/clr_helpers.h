@@ -302,6 +302,16 @@ namespace trace {
         mdToken getTypeFromHandleToken = 0;
     };
 
+    class FunctionMetaInfo {
+    private:
+    public:
+        const ModuleID moduleId;
+        const mdToken functionToken;
+        FunctionMetaInfo(ModuleID moduleId, mdToken functionToken)
+            : moduleId(moduleId),
+            functionToken(functionToken) {}
+    };
+
     struct ModuleInfo {
         const ModuleID id;
         const WSTRING path;

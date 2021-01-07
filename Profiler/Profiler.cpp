@@ -19,6 +19,7 @@ namespace trace {
     Profiler::Profiler() : refCount(0), corProfilerInfo(nullptr)
     {
         std::wcout << "Profiler()" << std::endl;;
+        GetSingletonish() = this;
     }
 
     Profiler::~Profiler()
@@ -40,11 +41,14 @@ namespace trace {
             return E_FAIL;
         }
 
+        const DWORD COR_PRF_ENABLE_REJIT = 0x00040000;
+
         const DWORD eventMask = COR_PRF_MONITOR_JIT_COMPILATION |
             COR_PRF_DISABLE_TRANSPARENCY_CHECKS_UNDER_FULL_TRUST | /* helps the case where this profiler is used on Full CLR */
             COR_PRF_DISABLE_INLINING |
             COR_PRF_MONITOR_MODULE_LOADS |
-            COR_PRF_DISABLE_ALL_NGEN_IMAGES;
+            COR_PRF_DISABLE_ALL_NGEN_IMAGES |
+            COR_PRF_ENABLE_REJIT;
 
         this->corProfilerInfo->SetEventMask(eventMask);
 
@@ -231,7 +235,7 @@ namespace trace {
         return S_OK;
     }
 
-    HRESULT Profiler::RewriteMethod(FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl)
+    HRESULT Profiler::RewriteMethod(WSTRING targetFunction, FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl)
     {
         // get the method's module and function token
         mdToken function_token = mdTokenNil;
@@ -250,6 +254,9 @@ namespace trace {
             return S_OK;
         }
 
+        InnerRewrite(targetFunction, moduleId, function_token, pICorProfilerFunctionControl);
+        InnerRewrite(targetFunction, moduleId, function_token, pICorProfilerFunctionControl);
+
         // check if method has already been written
         bool isiLRewrote = false;
         {
@@ -262,9 +269,21 @@ namespace trace {
             return S_OK;
         }
 
+
+        // exit rewrite lock
+        {
+            std::lock_guard<std::mutex> guard(mapLock);
+            iLRewriteMap[function_token] = true;
+        }
+
+        return S_OK;
+    }
+
+    HRESULT Profiler::InnerRewrite(WSTRING targetFunction, ModuleID moduleId, mdToken function_token, ICorProfilerFunctionControl* pICorProfilerFunctionControl)
+    {
         // extract some COM interfaces needed for querying the meta and rewriting the IL
         CComPtr<IUnknown> metadata_interfaces;
-        hr = corProfilerInfo->GetModuleMetaData(moduleId, ofRead | ofWrite,
+        auto hr = corProfilerInfo->GetModuleMetaData(moduleId, ofRead | ofWrite,
             IID_IMetaDataImport2,
             metadata_interfaces.GetAddressOf());
         RETURN_OK_IF_FAILED(hr);
@@ -285,12 +304,19 @@ namespace trace {
             return S_OK;
         }
 
+        FunctionMetaInfo* functionMetadata = new FunctionMetaInfo(moduleId, function_token);
+        {
+            std::lock_guard<std::mutex> guard(mapLock);
+            functionNameMetaInfoMap[functionInfo.type.name + "."_W + functionInfo.name] = functionMetadata;
+        }
+
+
         // some generic test on the signature and calling convertion
         hr = functionInfo.signature.TryParse();
         RETURN_OK_IF_FAILED(hr);
 
 
-        if ("Main"_W != functionInfo.name)
+        if (targetFunction != functionInfo.name)
         {
             return S_OK;
         }
@@ -351,7 +377,7 @@ namespace trace {
         RETURN_OK_IF_FAILED(hr);
 
         // start the IL rewriting
-        ILRewriter rewriter(corProfilerInfo, NULL, moduleId, function_token);
+        ILRewriter rewriter(corProfilerInfo, pICorProfilerFunctionControl, moduleId, function_token);
         RETURN_OK_IF_FAILED(rewriter.Import());
 
         // find position to start rewriting
@@ -370,12 +396,6 @@ namespace trace {
         hr = rewriter.Export();
         RETURN_OK_IF_FAILED(hr);
 
-        // exit rewrite lock
-        {
-            std::lock_guard<std::mutex> guard(mapLock);
-            iLRewriteMap[function_token] = true;
-        }
-
         std::wcout << "Finished rewrite: " << functionInfo.type.name << "." << functionInfo.name << "\n";
 
         return S_OK;
@@ -383,7 +403,7 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
     {
-        return RewriteMethod(functionId, NULL);
+        return RewriteMethod("JitRewriteTarget"_W, functionId, NULL);
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::JITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock)
@@ -683,18 +703,27 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::ReJITCompilationStarted(FunctionID functionId, ReJITID rejitId, BOOL fIsSafeToBlock)
     {
+        std::cout << "ReJITCompilationStarted: starting ..." << std::endl;
         return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::GetReJITParameters(ModuleID moduleId, mdMethodDef methodId, ICorProfilerFunctionControl *pFunctionControl)
     {
-        FunctionID functionId = 0;
-        HRESULT hr = corProfilerInfo->GetFunctionFromToken(moduleId, methodId, &functionId);
-        return RewriteMethod(functionId, pFunctionControl);
+        std::cout << "GetReJITParameters: starting ..." << std::endl;
+        //FunctionID functionId = 0;
+        //HRESULT hr = corProfilerInfo->GetFunctionFromToken(moduleId, methodId, &functionId);
+        //mdToken function_token = mdTokenNil;
+
+
+        auto hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
+        hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
+
+        return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::ReJITCompilationFinished(FunctionID functionId, ReJITID rejitId, HRESULT hrStatus, BOOL fIsSafeToBlock)
     {
+        std::cout << "ReJITCompilationFinished: starting ..." << std::endl;
         return S_OK;
     }
 
@@ -735,6 +764,50 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::DynamicMethodJITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock)
     {
+        return S_OK;
+    }
+
+    HRESULT Profiler::DoRequestReJit(WSTRING functionName)
+    {
+        FunctionMetaInfo* functionMetaInfo = nullptr;
+        {
+            std::lock_guard<std::mutex> guard(mapLock);
+            if (functionNameMetaInfoMap.count(functionName) > 0) {
+                functionMetaInfo = functionNameMetaInfoMap[functionName];
+            }
+        }
+
+        if (functionMetaInfo == nullptr) {
+            std::cout << "DoRequestReJit: Didn't find required meta data: " << std::endl;
+
+            return S_OK;
+        }
+
+        int numberMethods = 1;
+        ModuleID* moduleIds = new ModuleID[numberMethods] { functionMetaInfo->moduleId };
+        mdMethodDef* methodIds = new mdMethodDef[numberMethods] { functionMetaInfo->functionToken };
+        HRESULT hr = corProfilerInfo->RequestReJIT(numberMethods, moduleIds, methodIds);
+
+        std::cout << "DoRequestReJit: result: " << std::hex << hr << std::dec << std::endl;
+
+        return S_OK;
+    }
+
+    extern "C" __declspec(dllexport) HRESULT __cdecl RequestReJit(LPWSTR functionNameChar)
+    {
+        std::cout << "RequestReJit: starting ..." << std::endl;
+        auto profiler = Profiler::GetSingletonish();
+        if (profiler == nullptr) {
+            std::cout << "Unable to request rejit because the profiler reference is invalid." << std::endl;
+            return E_FAIL;
+        }
+        WSTRING functionName(functionNameChar);
+
+        std::thread t1(&Profiler::DoRequestReJit, profiler, functionName);
+
+        // block the calling managed thread until the worker thread has finished
+        t1.join();
+
         return S_OK;
     }
 }
