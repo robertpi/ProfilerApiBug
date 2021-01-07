@@ -15,10 +15,11 @@
 #include <cassert>
 
 namespace trace {
+    BOOL debug = false;
 
     Profiler::Profiler() : refCount(0), corProfilerInfo(nullptr)
     {
-        std::wcout << "Profiler()" << std::endl;;
+        if (debug) std::wcout << "Profiler()" << std::endl;;
         GetSingletonish() = this;
     }
 
@@ -52,14 +53,14 @@ namespace trace {
 
         this->corProfilerInfo->SetEventMask(eventMask);
 
-        std::wcout << "Profiler Initialize Success\n";
+        if (debug) std::wcout << "Profiler Initialize Success\n";
 
         return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::Shutdown()
     {
-        std::wcout << "Profiler Shutdown\n";
+        if (debug) std::wcout << "Profiler Shutdown\n";
 
         if (this->corProfilerInfo != nullptr)
         {
@@ -140,7 +141,7 @@ namespace trace {
         // only log the load of the module with an entry point, otherwise we'll spam the logs
         if (entryPointToken != mdTokenNil)
         {
-            std::wcout << "Assembly: " << module_info.assembly.name << ", EntryPointToken: " << entryPointToken << "\n";
+            if (debug) std::wcout << "Assembly: " << module_info.assembly.name << ", EntryPointToken: " << entryPointToken << "\n";
         }
 
         if (module_info.assembly.name == "mscorlib"_W || module_info.assembly.name == "System.Private.CoreLib"_W) {
@@ -193,7 +194,7 @@ namespace trace {
     {
         // remove info about the module on unload
 
-        std::wcout << "Profiler::ModuleUnloadFinished, ModuleID: " << moduleId << "\n";
+        if (debug) std::wcout << "Profiler::ModuleUnloadFinished, ModuleID: " << moduleId << "\n";
         {
             std::lock_guard<std::mutex> guard(mapLock);
             if (moduleMetaInfoMap.count(moduleId) > 0) {
@@ -321,7 +322,7 @@ namespace trace {
             return S_OK;
         }
 
-        std::wcout << "Starting rewrite: " << functionInfo.type.name << "." << functionInfo.name << std::endl;
+        if (debug) std::wcout << "Starting rewrite: " << functionInfo.type.name << "." << functionInfo.name << std::endl;
 
 
         //return ref not support
@@ -396,7 +397,7 @@ namespace trace {
         hr = rewriter.Export();
         RETURN_OK_IF_FAILED(hr);
 
-        std::wcout << "Finished rewrite: " << functionInfo.type.name << "." << functionInfo.name << "\n";
+        if (debug) std::wcout << "Finished rewrite: " << functionInfo.type.name << "." << functionInfo.name << "\n";
 
         return S_OK;
     }
@@ -703,17 +704,13 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::ReJITCompilationStarted(FunctionID functionId, ReJITID rejitId, BOOL fIsSafeToBlock)
     {
-        std::cout << "ReJITCompilationStarted: starting ..." << std::endl;
+        if (debug) std::wcout << "ReJITCompilationStarted: starting ..." << std::endl;
         return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::GetReJITParameters(ModuleID moduleId, mdMethodDef methodId, ICorProfilerFunctionControl *pFunctionControl)
     {
-        std::cout << "GetReJITParameters: starting ..." << std::endl;
-        //FunctionID functionId = 0;
-        //HRESULT hr = corProfilerInfo->GetFunctionFromToken(moduleId, methodId, &functionId);
-        //mdToken function_token = mdTokenNil;
-
+        if (debug) std::wcout << "GetReJITParameters: starting ..." << std::endl;
 
         auto hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
         hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
@@ -723,7 +720,7 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::ReJITCompilationFinished(FunctionID functionId, ReJITID rejitId, HRESULT hrStatus, BOOL fIsSafeToBlock)
     {
-        std::cout << "ReJITCompilationFinished: starting ..." << std::endl;
+        if (debug) std::wcout << "ReJITCompilationFinished: starting ..." << std::endl;
         return S_OK;
     }
 
@@ -778,7 +775,7 @@ namespace trace {
         }
 
         if (functionMetaInfo == nullptr) {
-            std::cout << "DoRequestReJit: Didn't find required meta data: " << std::endl;
+            if (debug) std::wcout << "DoRequestReJit: Didn't find required meta data: " << std::endl;
 
             return S_OK;
         }
@@ -788,17 +785,18 @@ namespace trace {
         mdMethodDef* methodIds = new mdMethodDef[numberMethods] { functionMetaInfo->functionToken };
         HRESULT hr = corProfilerInfo->RequestReJIT(numberMethods, moduleIds, methodIds);
 
-        std::cout << "DoRequestReJit: result: " << std::hex << hr << std::dec << std::endl;
+        if (debug) std::wcout << "DoRequestReJit: result: " << std::hex << hr << std::dec << std::endl;
 
         return S_OK;
     }
 
     extern "C" __declspec(dllexport) HRESULT __cdecl RequestReJit(LPWSTR functionNameChar)
     {
-        std::cout << "RequestReJit: starting ..." << std::endl;
+        if (debug) std::wcout << "RequestReJit: starting ... " << functionNameChar << " !" << std::endl;
+
         auto profiler = Profiler::GetSingletonish();
         if (profiler == nullptr) {
-            std::cout << "Unable to request rejit because the profiler reference is invalid." << std::endl;
+            if (debug) std::wcout << "Unable to request rejit because the profiler reference is invalid." << std::endl;
             return E_FAIL;
         }
         WSTRING functionName(functionNameChar);

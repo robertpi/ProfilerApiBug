@@ -19,6 +19,31 @@ namespace ProfilerTestHarness
 
         static unsafe void Main(string[] args)
         {
+            SetupAndCheckEnvironment();
+
+
+            Console.WriteLine("First set of method calls ...");
+
+            JitRewriteTarget();
+            ReJitRewriteTarget();
+
+            Console.WriteLine();
+            Console.WriteLine("Request Rejit and second set of method calls ...");
+            var programType = typeof(Program);
+            var functionName = $"{programType.FullName}.{nameof(ReJitRewriteTarget)}";
+            RequestReJit(functionName);
+
+            JitRewriteTarget();
+            ReJitRewriteTarget();
+
+            Console.WriteLine();
+            Console.WriteLine("Test over.");
+        }
+
+        private static unsafe void SetupAndCheckEnvironment()
+        {
+            Console.WriteLine("Setup and check environment ...");
+
             Environment.SetEnvironmentVariable("PATH", $"{Environment.GetEnvironmentVariable("PATH")};{Environment.GetEnvironmentVariable("CORECLR_PROFILER_PATH")}");
 
             var envVars = new[] { "CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH" };
@@ -28,18 +53,7 @@ namespace ProfilerTestHarness
                 Console.WriteLine(item);
             }
 
-            JitRewriteTarget();
-            ReJitRewriteTarget();
-
-            var programType = typeof(Program);
-            var functionName = $"{programType.FullName}.{nameof(ReJitRewriteTarget)}";
-            Console.WriteLine(functionName);
-            RequestReJit(functionName);
-
-            JitRewriteTarget();
-            ReJitRewriteTarget();
-
-            Console.WriteLine("Hello World!");
+            Console.WriteLine();
         }
     }
 }

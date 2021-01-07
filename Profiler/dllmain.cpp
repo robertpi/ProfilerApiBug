@@ -16,10 +16,6 @@ BOOL STDMETHODCALLTYPE DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID
 
 extern "C" HRESULT STDMETHODCALLTYPE DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
 {
-    //exit(1);
-
-    std::wcout << "DllGetClassObject: starting ..." << std::endl;;
-
     // {88E5B029-D6B4-4709-B445-03E9BDAB2FA2}
     const GUID CLSID_CorProfiler = { 0x88e5b029, 0xd6b4, 0x4709, { 0xb4, 0x45, 0x3, 0xe9, 0xbd, 0xab, 0x2f, 0xa2 } };
     
