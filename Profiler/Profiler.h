@@ -165,7 +165,7 @@ namespace trace {
             return count;
         }
 
-        HRESULT RewriteMethod(WSTRING targetFunction, FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl);
+        HRESULT RewriteMethod(WSTRING targetFunction, FunctionID functionId);
         HRESULT InnerRewrite(WSTRING targetFunction, ModuleID moduleId, mdToken function_token, ICorProfilerFunctionControl* pICorProfilerFunctionControl);
         HRESULT DoRequestReJit(WSTRING functionName);
 

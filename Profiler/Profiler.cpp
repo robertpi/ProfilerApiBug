@@ -236,7 +236,7 @@ namespace trace {
         return S_OK;
     }
 
-    HRESULT Profiler::RewriteMethod(WSTRING targetFunction, FunctionID functionId, ICorProfilerFunctionControl* pICorProfilerFunctionControl)
+    HRESULT Profiler::RewriteMethod(WSTRING targetFunction, FunctionID functionId)
     {
         // get the method's module and function token
         mdToken function_token = mdTokenNil;
@@ -255,9 +255,6 @@ namespace trace {
             return S_OK;
         }
 
-        InnerRewrite(targetFunction, moduleId, function_token, pICorProfilerFunctionControl);
-        InnerRewrite(targetFunction, moduleId, function_token, pICorProfilerFunctionControl);
-
         // check if method has already been written
         bool isiLRewrote = false;
         {
@@ -270,6 +267,9 @@ namespace trace {
             return S_OK;
         }
 
+        // call rewrite twice to demo the issue
+        InnerRewrite(targetFunction, moduleId, function_token, NULL);
+        InnerRewrite(targetFunction, moduleId, function_token, NULL);
 
         // exit rewrite lock
         {
@@ -404,7 +404,7 @@ namespace trace {
 
     HRESULT STDMETHODCALLTYPE Profiler::JITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock)
     {
-        return RewriteMethod("JitRewriteTarget"_W, functionId, NULL);
+        return RewriteMethod("JitRewriteTarget"_W, functionId);
     }
 
     HRESULT STDMETHODCALLTYPE Profiler::JITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock)
@@ -712,6 +712,7 @@ namespace trace {
     {
         if (debug) std::wcout << "GetReJITParameters: starting ..." << std::endl;
 
+        // call rewrite twice to demo the issue
         auto hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
         hr = InnerRewrite("ReJitRewriteTarget"_W, moduleId, methodId, pFunctionControl);
 
